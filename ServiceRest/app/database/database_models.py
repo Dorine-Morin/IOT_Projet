@@ -3,7 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 
-SQLALCHEMY_DATABASE_URL = "mysql+mysqlconnector://avnadmin:AVNS_PjGuiaMWF8uBID8ilXp@mysql-3deb058a-morindorine-c300.d.aivencloud.com:14176/defaultdb?ssl-mode=REQUIRED"
+SQLALCHEMY_DATABASE_URL = "mysql+mysqlconnector://avnadmin:AVNS_PjGuiaMWF8uBID8ilXp@mysql-3deb058a-morindorine-c300.d.aivencloud.com:14176/defaultdb"
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 

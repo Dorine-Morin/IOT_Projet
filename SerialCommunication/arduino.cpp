@@ -56,6 +56,7 @@ void loop() {
   if (distance < 10) {
     Serial.println("PRESENCE 1");
     myservo.write(0);  // Tourner à 0 degrés pour la carte RFID
+    Serial.println("Motor position: 90"); // Nouveau message pour mouvement moteur
     delay(1000);  // Attendre que le moteur atteigne la position
 
     if (readRFID()) {
@@ -65,6 +66,7 @@ void loop() {
     }
     delay(2000);
     myservo.write(90);  // Retourner à la position initiale
+    Serial.println("Motor position: 0"); // Nouveau message pour mouvement moteur
     delay(1000);       // Attendre que le moteur revienne à 0 degrés
     Serial.println("PRESENCE 0");
   }
@@ -80,6 +82,7 @@ void handleCommand(String command) {
   if (command.startsWith("POSITION")) {
     int position = command.substring(9).toInt();
     myservo.write(position);
+    Serial.println("Motor position: " + String(position)); // Nouveau message pour mouvement moteur
   } else if (command.startsWith("EVENT")) {
     Serial.println("EVENT Command received: " + command);
   } else if (command.startsWith("PRESENCE")) {
@@ -116,9 +119,6 @@ bool readRFID() {
   for (byte i = 0; i < 4; i++) {
     nuidPICC[i] = rfid.uid.uidByte[i];
   }
-  Serial.print("RFID tag in dec: ");
-  printDec(rfid.uid.uidByte, rfid.uid.size);
-  Serial.println();
   // Arrêter la communication avec la carte
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
