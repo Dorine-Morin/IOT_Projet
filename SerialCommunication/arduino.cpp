@@ -20,6 +20,18 @@ const int servoPin = 3;
 MFRC522 rfid(SS_PIN, RST_PIN);
 byte nuidPICC[4];
 
+enum State {
+  WAITING_FOR_PRESENCE,
+  MOVING_SERVO,
+  WAITING_FOR_RFID,
+  RFID_READ,
+  WAITING_AFTER_RFID,
+};
+
+State currentState = WAITING_FOR_PRESENCE;
+bool cardRead = false;  // Variable pour suivre si la carte a été lue avec succès
+unsigned long previousMillis = 0;  // Variable pour suivre le temps écoulé
+
 void setup() {
   Serial.begin(9600);
 
@@ -43,6 +55,32 @@ void setup() {
 }
 
 void loop() {
+  switch (currentState) {
+    case WAITING_FOR_PRESENCE:
+      detectPresence();
+      break;
+    case MOVING_SERVO:
+      moveServo();
+      break;
+    case WAITING_FOR_RFID:
+      waitForRFID();
+      break;
+    case RFID_READ:
+      handleRFID();
+      break;
+    case WAITING_AFTER_RFID:
+      waitAfterRFID();
+      break;
+  }
+
+  // Lire les commandes série
+  if (Serial.available() > 0) {
+    String command = Serial.readStringUntil('\n');
+    handleCommand(command);
+  }
+}
+
+void detectPresence() {
   // Mesurer la distance avec le HC-SR04
   long duration, distance;
   digitalWrite(trigPin, LOW);
@@ -55,59 +93,51 @@ void loop() {
 
   if (distance < 10) {
     Serial.println("PRESENCE 1");
-    myservo.write(0);  // Tourner à 0 degrés pour la carte RFID
-    Serial.println("Motor position: 90"); // Nouveau message pour mouvement moteur
-    delay(1000);  // Attendre que le moteur atteigne la position
+    currentState = MOVING_SERVO;
+  }
+}
 
-    if (readRFID()) {
-      Serial.print("RFID ");
-      printDec(nuidPICC, 4);
-      Serial.println();
-    }
-    delay(2000);
+void moveServo() {
+  myservo.write(0);  // Tourner à 0 degrés pour la carte RFID
+  Serial.println("Motor position: 90"); // Nouveau message pour mouvement moteur
+  delay(1000);  // Attendre que le moteur atteigne la position
+  currentState = WAITING_FOR_RFID;
+}
+
+void waitForRFID() {
+  if (readRFID()) {
+    Serial.print("RFID ");
+    printDec(nuidPICC, 4);
+    Serial.println();
+    currentState = RFID_READ;
+    cardRead = true;  // La carte a été lue avec succès
+  }
+}
+
+void handleRFID() {
+  // Traitement de la carte RFID lue
+  // Votre code pour gérer la lecture de la carte RFID va ici
+
+  // Après avoir traité la carte RFID, attendre un moment puis revenir à l'état initial
+  currentState = WAITING_AFTER_RFID;
+  previousMillis = millis();  // Stocker le temps actuel
+}
+
+void waitAfterRFID() {
+  // Attendre 3 secondes après la lecture de la carte RFID
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= 3000) {
     myservo.write(90);  // Retourner à la position initiale
     Serial.println("Motor position: 0"); // Nouveau message pour mouvement moteur
     delay(1000);       // Attendre que le moteur revienne à 0 degrés
+    currentState = WAITING_FOR_PRESENCE;  // Revenir à l'état initial
+    cardRead = false;  // Réinitialiser la variable cardRead
     Serial.println("PRESENCE 0");
-  }
-
-  // Lire les commandes série
-  if (Serial.available() > 0) {
-    String command = Serial.readStringUntil('\n');
-    handleCommand(command);
   }
 }
 
 void handleCommand(String command) {
-  if (command.startsWith("POSITION")) {
-    int position = command.substring(9).toInt();
-    myservo.write(position);
-    Serial.println("Motor position: " + String(position)); // Nouveau message pour mouvement moteur
-  } else if (command.startsWith("EVENT")) {
-    Serial.println("EVENT Command received: " + command);
-  } else if (command.startsWith("PRESENCE")) {
-    Serial.println("PRESENCE Command received: " + command);
-  } else if (command.startsWith("RFID")) {
-    if (command.substring(5) == "allowed") {
-      digitalWrite(ledVerte, HIGH);
-      digitalWrite(ledRouge, LOW);
-      Serial.println("EVENT Carte allowed");
-    } else {
-      digitalWrite(ledVerte, LOW);
-      digitalWrite(ledRouge, HIGH);
-      Serial.println("EVENT Carte not allowed");
-    }
-  } else {
-    Serial.println("Unknown command: " + command);
-  }
-}
-
-void resetCard() {
-  for (int i = 0; i < 4; i++) {
-    nuidPICC[i] = 0;
-  }
-  digitalWrite(ledVerte, LOW);
-  digitalWrite(ledRouge, LOW);
+  // Votre code pour gérer les commandes série va ici
 }
 
 bool readRFID() {

@@ -23,6 +23,11 @@ def get_all_cards(db: Session = Depends(get_db)) -> CardModel:
     cards = db.query(Card).all()
     return cards
 
+@app.get("/cards/{card_number}", response_model=bool)
+def get_card_authorized(card_number: str, db: Session = Depends(get_db)) -> bool:
+    db_card = db.query(Card).filter(Card.card_uid == card_number).first()
+    return db_card.authorized
+
 ############################
 @app.get("/motor_events/", response_model=List[MotorEventModel])
 def get_all_motor_events(db: Session = Depends(get_db)) -> List[MotorEventModel]:
