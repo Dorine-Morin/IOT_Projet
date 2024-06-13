@@ -9,12 +9,14 @@ SERIAL_PORT = 'COM5'  # Changer en fonction du port COM de votre Arduino
 BAUD_RATE = 9600
 
 # Paramètres MQTT
-MQTT_BROKER = '192.168.0.16'  # Adresse IP de votre Raspberry Pi
+MQTT_BROKER = '192.168.1.6'  # Adresse IP de votre Raspberry Pi
 MQTT_PORT = 1883  # Port du broker MQTT
 MQTT_TOPIC_RFID = 'iot/rfid'  # Sujet pour publier les événements
 MQTT_TOPIC_PRESENCE = 'iot/presence'
 MQTT_TOPIC_MOTOR = 'iot/motor'
 MQTT_TOPIC_AUTHORIZED = 'iot/card/authorized'  # Sujet pour publier les résultats de l'autorisation de la carte
+MQTT_TOPIC_CARDS_REQUEST = 'iot/request/cards'  # Nouveau sujet pour recevoir les demandes de position du moteur
+MQTT_TOPIC_CARDS_RESPONSE = 'iot/response/cards'  # Sujet pour publier les réponses de la position du moteur
 MQTT_USER = 'morin'  # Nom d'utilisateur MQTT
 MQTT_PASSWORD = 'morin'  # Mot de passe MQTT
 
@@ -33,7 +35,7 @@ def read_data(ser):
 ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
 
 # Attendre que la communication soit établie
-time.sleep(2)
+time.sleep(5)
 
 # Configuration du client MQTT
 client = mqtt.Client()
@@ -44,6 +46,9 @@ client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
 # Définir les fonctions de rappel pour le client MQTT
 def on_connect(client, userdata, flags, rc):
     print(f"Connected with result code {rc}")
+    # S'abonner aux sujets nécessaires
+    client.subscribe(MQTT_TOPIC_RFID)
+    client.subscribe(MQTT_TOPIC_CARDS_REQUEST)  # S'abonner au nouveau sujet
 
 def on_publish(client, userdata, mid):
     print(f"Message {mid} published.")
@@ -52,30 +57,43 @@ def on_message(client, userdata, msg):
     payload = msg.payload.decode('utf-8')
     print(f"Message received on topic {msg.topic}: {payload}")
 
-    if payload.startswith("RFID"):
+    if msg.topic == MQTT_TOPIC_CARDS_REQUEST:
+        # Traiter la demande de position du moteur
+        response = requests.get(f"{API_URL}/rfid_reads/")
+        if response.status_code == 200:
+            cards_read_data = response.json()
+            print(cards_read_data)
+            client.publish(MQTT_TOPIC_CARDS_RESPONSE, f"{cards_read_data}")
+        else:
+            print("Failed to get rfid read data")
+    elif payload.startswith("RFID"): 
         parts = payload.split()
         card_number = "".join(parts[1:])  # Concatène tous les segments après "RFID"
-        
-        response = requests.get(f"{API_URL}/cards/{card_number}")
-        if response.status_code == 200:
-            authorized = response.json()
-            if authorized:
-                print(f"Card {card_number} is authorized.")
-                client.publish(MQTT_TOPIC_AUTHORIZED, "authorized")
+
+        print(card_number)
+        if card_number == '0':
+            client.publish(MQTT_TOPIC_AUTHORIZED, "none")
+        else:
+            response = requests.get(f"{API_URL}/cards/{card_number}")
+            if response.status_code == 200:
+                authorized = response.json()
+                if authorized:
+                    print(f"Card {card_number} is authorized.")
+                    client.publish(MQTT_TOPIC_AUTHORIZED, "authorized")
+                else:
+                    print(f"Card {card_number} is not authorized.")
+                    client.publish(MQTT_TOPIC_AUTHORIZED, "not authorized")
+
+                # Enregistrer l'événement RFID via l'API REST
+                rfid_data = {
+                    "card_uid": card_number,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "authorized": authorized
+                }
+                requests.post(f"{API_URL}/rfid_reads/", json=rfid_data)
             else:
                 print(f"Card {card_number} is not authorized.")
                 client.publish(MQTT_TOPIC_AUTHORIZED, "not authorized")
-
-            # Enregistrer l'événement RFID via l'API REST
-            rfid_data = {
-                "card_uid": card_number,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "authorized": authorized
-            }
-            requests.post(f"{API_URL}/rfid_reads/", json=rfid_data)
-        else:
-            print(f"Card {card_number} is not authorized.")
-            client.publish(MQTT_TOPIC_AUTHORIZED, "not authorized")
 
 client.on_connect = on_connect
 client.on_publish = on_publish
@@ -83,8 +101,13 @@ client.on_message = on_message
 
 # Connexion au broker MQTT
 client.connect(MQTT_BROKER, MQTT_PORT, 60)
-client.subscribe(MQTT_TOPIC_RFID)
 client.loop_start()  # Démarrer le thread de réseau
+
+# Période d'attente avant d'envoyer les premiers messages de détection
+initial_delay = 10
+print(f"Waiting for {initial_delay} seconds before starting message processing...")
+time.sleep(initial_delay)
+print("Starting message processing...")
 
 try:
     # Exemples de commandes à envoyer à l'Arduino
@@ -106,13 +129,14 @@ try:
             if len(parts) == 2 and parts[1].replace('.', '', 1).isdigit():
                 distance = float(parts[1])
                 client.publish(MQTT_TOPIC_PRESENCE, f"{response}")
-
-                # Enregistrer l'événement de présence via l'API REST
-                presence_data = {
-                    "distance": distance,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
-                requests.post(f"{API_URL}/presence_detections/", json=presence_data)
+                
+                if response.startswith("PRESENCE 1"):                  
+                    # Enregistrer l'événement de présence via l'API REST
+                    presence_data = {
+                        "distance": distance,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                    requests.post(f"{API_URL}/presence_detections/", json=presence_data)
             else:
                 print("Invalid PRESENCE data received")
 

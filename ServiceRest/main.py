@@ -1,5 +1,7 @@
 from datetime import datetime
+import json
 from fastapi import FastAPI, Depends
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import Session
 from typing import List
@@ -77,10 +79,12 @@ def create_presence_detection(detection_data: PresenceDetectionCreate, db: Sessi
     return db_detection
 
 ############################
-@app.get("/rfid_reads/", response_model=List[RfidReadModel])
-def get_all_rfid_reads(db: Session = Depends(get_db)) -> List[RfidReadModel]:
+@app.get("/rfid_reads/")
+def get_all_rfid_reads(db: Session = Depends(get_db)):
     reads = db.query(RfidRead).all()
-    return reads
+    gros_dict = jsonable_encoder(reads)
+    
+    return json.dumps(gros_dict)
 
 @app.post("/rfid_reads/", response_model=RfidReadModel)
 def create_rfid_read(read_data: RfidReadCreate, db: Session = Depends(get_db)) -> RfidReadModel:

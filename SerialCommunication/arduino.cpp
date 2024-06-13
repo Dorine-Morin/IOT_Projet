@@ -35,12 +35,6 @@ unsigned long previousMillis = 0;  // Variable pour suivre le temps écoulé
 void setup() {
   Serial.begin(9600);
 
-  // Initialisation des leds
-  pinMode(ledRouge, OUTPUT);
-  pinMode(ledVerte, OUTPUT);
-  digitalWrite(ledRouge, LOW);
-  digitalWrite(ledVerte, LOW);
-
   // Initialisation du capteur de distance
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
@@ -133,6 +127,8 @@ void waitAfterRFID() {
     currentState = WAITING_FOR_PRESENCE;  // Revenir à l'état initial
     cardRead = false;  // Réinitialiser la variable cardRead
     Serial.println("PRESENCE 0");
+    delay(5000);   
+    Serial.println("RFID 0");
   }
 }
 
